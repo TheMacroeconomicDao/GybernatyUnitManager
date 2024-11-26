@@ -1,0 +1,71 @@
+@startuml
+
+title GybernatyUnitManager - Диаграмма классов
+
+class GybernatyUnitManager {
+    + {static} GYBERNATY_ROLE: bytes32
+    + {static} APPROVAL_TIMEOUT: uint256
+    + MAX_LEVEL: uint32
+    + MIN_LEVEL: uint32
+    + GBR_TOKEN_AMOUNT: uint256
+    + BNB_AMOUNT: uint256
+    + MAX_MONTHLY_WITHDRAWALS: uint256
+    + MONTH_IN_SECONDS: uint256
+    + MIN_APPROVALS_REQUIRED: uint256
+    + gbrToken: IERC20
+    - users: mapping(address => User)
+    - levelWithdrawLimits: mapping(uint32 => uint256)
+    - pendingActions: mapping(bytes32 => PendingAction)
+    - userMonthlyWithdrawals: mapping(address => mapping(uint256 => uint256))
+    - actionCounter: Counter
+    + constructor(address, uint32, uint32, uint256, uint256, uint256, uint256)
+    + joinGybernaty()
+    + proposeCreateUser(address, uint32, string, string)
+    + approveAction(bytes32)
+    + withdrawTokens(uint256)
+    + getUserLevel(address): uint32
+    + getActionDetails(bytes32): tuple
+    + pause()
+    + unpause()
+}
+
+struct User {
+    + userAddress: address
+    + name: string
+    + link: string
+    + markedUp: bool
+    + markedDown: bool
+    + level: uint32
+    + lastWithdrawTime: uint256
+    + withdrawCount: uint256
+    + exists: bool
+    + lastActionTime: uint256
+}
+
+struct PendingAction {
+    + initiator: address
+    + targetUser: address
+    + actionType: ActionType
+    + proposedLevel: uint32
+    + name: string
+    + link: string
+    + isPending: bool
+    + createdAt: uint256
+    + approvals: mapping(address => bool)
+    + approvalsCount: uint256
+}
+
+enum ActionType {
+    CREATE_USER
+    LEVEL_UP
+    LEVEL_DOWN
+}
+
+GybernatyUnitManager --|> ReentrancyGuard
+GybernatyUnitManager --|> Pausable
+GybernatyUnitManager --|> AccessControl
+GybernatyUnitManager ..> User
+GybernatyUnitManager ..> PendingAction
+GybernatyUnitManager ..> ActionType
+
+@enduml
