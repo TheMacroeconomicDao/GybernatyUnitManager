@@ -5,9 +5,9 @@
   "private": true,
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test",
+    "test": "hardhat test --network hardhat",
+    "test:coverage": "hardhat coverage --network hardhat",
     "deploy": "hardhat deploy",
-    "coverage": "hardhat coverage",
     "lint": "solhint 'contracts/**/*.sol'",
     "lint:fix": "solhint 'contracts/**/*.sol' --fix"
   },
@@ -28,7 +28,6 @@
     "hardhat": "^2.19.1",
     "hardhat-gas-reporter": "^1.0.9",
     "solhint": "^4.0.0",
-    "solidity-coverage": "^0.8.5",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2"
   }

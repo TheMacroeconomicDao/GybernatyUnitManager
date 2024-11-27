@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../interfaces/IApprovalManager.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "../libraries/Constants.sol";
+import "../interfaces/IApprovalManager.sol";
 
-contract ApprovalManager is IApprovalManager, AccessControl, Pausable {
-    bytes32 public constant GYBERNATY_ROLE = keccak256("GYBERNATY_ROLE");
-    uint256 private constant APPROVAL_TIMEOUT = 7 days;
-
+contract ApprovalManager is IApprovalManager, AccessControl {
     mapping(bytes32 => PendingAction) private pendingActions;
     mapping(bytes32 => mapping(uint32 => uint256)) private actionLevelApprovals;
 
@@ -16,66 +13,102 @@ contract ApprovalManager is IApprovalManager, AccessControl, Pausable {
     error AlreadyApproved();
     error ActionExpired();
     error InsufficientApprovals();
-    error InvalidActionType();
+    error UnauthorizedApprover();
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    function addApproval(bytes32 actionId) external override whenNotPaused returns (bool) {
+    function proposeAction(
+        address initiator,
+        address targetUser,
+        ActionType actionType,
+        uint32 level,
+        string memory name,
+        string memory link
+    ) external returns (bytes32) {
+        bytes32 actionId = keccak256(
+            abi.encodePacked(
+                initiator,
+                targetUser,
+                actionType,
+                level,
+                block.timestamp
+            )
+        );
+
         PendingAction storage action = pendingActions[actionId];
-        if (!action.isPending) revert ActionNotPending();
-        if (action.approvals[msg.sender]) revert AlreadyApproved();
-        if (block.timestamp > action.createdAt + APPROVAL_TIMEOUT) {
-            _expireAction(actionId);
+        action.initiator = initiator;
+        action.targetUser = targetUser;
+        action.actionType = actionType;
+        action.proposedLevel = level;
+        action.name = name;
+        action.link = link;
+        action.isPending = true;
+        action.createdAt = block.timestamp;
+
+        return actionId;
+    }
+
+    function approveAction(
+        bytes32 actionId,
+        address approver,
+        uint32 approverLevel,
+        bool isGybernaty
+    ) external returns (bool) {
+        PendingAction storage action = pendingActions[actionId];
+        
+        if (!action.isPending) {
+            revert ActionNotPending();
+        }
+        
+        if (action.approvals[approver]) {
+            revert AlreadyApproved();
+        }
+        
+        if (block.timestamp > action.createdAt + Constants.APPROVAL_TIMEOUT) {
+            action.isPending = false;
+            emit ActionExpired(actionId, block.timestamp);
             revert ActionExpired();
         }
 
-        action.approvals[msg.sender] = true;
+        action.approvals[approver] = true;
         action.approvalsCount++;
+        actionLevelApprovals[actionId][approverLevel]++;
 
-        if (hasRole(GYBERNATY_ROLE, msg.sender)) {
-            actionLevelApprovals[actionId][4]++;
-        }
+        emit ActionApproved(actionId, approver, block.timestamp);
 
-        emit ActionApproved(actionId, msg.sender, block.timestamp);
-
-        return _checkRequiredApprovals(action, actionId);
+        return _checkRequiredApprovals(actionId, approverLevel, isGybernaty);
     }
 
     function _checkRequiredApprovals(
-        PendingAction storage action,
-        bytes32 actionId
+        bytes32 actionId,
+        uint32 approverLevel,
+        bool isGybernaty
     ) private view returns (bool) {
-        if (hasRole(GYBERNATY_ROLE, msg.sender)) {
+        if (isGybernaty) {
             return true;
         }
 
-        if (action.targetLevel == 4) {
-            return actionLevelApprovals[actionId][4] > 0;
+        PendingAction storage action = pendingActions[actionId];
+        if (action.proposedLevel == Constants.MAX_LEVEL) {
+            return false; // Требуется подтверждение только от Gybernaty
         }
 
-        uint32 requiredLevel1 = action.initiatorLevel + 1;
-        uint32 requiredLevel2 = action.initiatorLevel + 2;
+        uint32 requiredLevel1 = action.proposedLevel + 1;
+        uint32 requiredLevel2 = action.proposedLevel + 2;
 
         return actionLevelApprovals[actionId][requiredLevel1] > 0 && 
                actionLevelApprovals[actionId][requiredLevel2] > 0;
     }
 
-    function _expireAction(bytes32 actionId) private {
-        PendingAction storage action = pendingActions[actionId];
-        action.isPending = false;
-        emit ActionExpired(actionId, block.timestamp);
-    }
-
-    function getActionDetails(bytes32 actionId) external view override returns (
+    function getActionDetails(bytes32 actionId) external view returns (
         address initiator,
         address targetUser,
         ActionType actionType,
         uint32 proposedLevel,
-        uint256 approvalsCount,
-        bool isPending,
-        uint256 createdAt
+        string memory name,
+        string memory link
     ) {
         PendingAction storage action = pendingActions[actionId];
         return (
@@ -83,17 +116,8 @@ contract ApprovalManager is IApprovalManager, AccessControl, Pausable {
             action.targetUser,
             action.actionType,
             action.proposedLevel,
-            action.approvalsCount,
-            action.isPending,
-            action.createdAt
+            action.name,
+            action.link
         );
-    }
-
-    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _pause();
-    }
-
-    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _unpause();
     }
 }
