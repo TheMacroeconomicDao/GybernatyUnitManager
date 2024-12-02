@@ -4,14 +4,13 @@
     "module": "commonjs",
     "strict": true,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "outDir": "dist",
     "declaration": true,
-    "resolveJsonModule": true
+    "types": ["mocha", "chai", "node"]
   },
   "include": [
-    "./scripts",
     "./test",
-    "./typechain-types"
-  ],
-  "files": ["./hardhat.config.ts"]
+    "./scripts"
+  ]
 }
